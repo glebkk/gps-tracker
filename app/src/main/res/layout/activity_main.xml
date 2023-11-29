@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center"
+    android:orientation="vertical" >
+    <ToggleButton
+        android:id="@+id/tb"
+        android:layout_width="100dp"
+        android:layout_height="100dp"
+        android:checked="false"
+        android:textOff=""
+        android:textOn=""
+        android:background="@drawable/toggle_selector"
+        />
+
+    <TextView
+        android:id="@+id/tvName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="name: "
+        android:layout_marginHorizontal="10dp"
+        />
+
+    <TextView
+        android:id="@+id/tvUuid"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="uuid: "
+        android:layout_marginHorizontal="10dp"
+        />
+
+</LinearLayout>

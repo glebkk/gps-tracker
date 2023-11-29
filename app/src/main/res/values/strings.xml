@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">gps_tracker</string>
+    <string name="preference_file_key">user_info</string>
+    <string name="user_uuid_key">uuid</string>
+    <string name="user_name_key">name</string>
+</resources>
