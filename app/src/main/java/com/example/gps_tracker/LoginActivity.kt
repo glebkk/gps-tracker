@@ -26,6 +26,7 @@ class LoginActivity : AppCompatActivity() {
         val sharedPref = getSharedPreferences(
             getString(R.string.preference_file_key), Context.MODE_PRIVATE)
         val isSetUuid = sharedPref.contains(getString(R.string.user_uuid_key))
+
         if(isSetUuid){
             val secondActivityIntent = Intent(
                 this, MainActivity::class.java

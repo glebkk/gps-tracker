@@ -37,20 +37,18 @@ class DefaultLocationClient(
                 throw LocationClient.LocationException("GPS is disabled")
             }
 
-            val request = LocationRequest.create()
-                .setInterval(interval)
-                .setFastestInterval(interval)
-                .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
-                .setWaitForAccurateLocation(true)
 
-            request.smallestDisplacement = 5f
+            val request = LocationRequest.Builder(interval)
+                .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
+                .setMinUpdateDistanceMeters(5f)
+                .setWaitForAccurateLocation(true)
+                .build()
 
             val locationCallback = object : LocationCallback() {
                 override fun onLocationResult(result: LocationResult) {
                     super.onLocationResult(result)
-                    if(result.lastLocation == null) return
-                    if(isBetterLocation(result.lastLocation!!)){
-                        if(result.lastLocation != null) {
+                    if(result.lastLocation != null) {
+                        if(isBetterLocation(result.lastLocation!!))  {
                             currentBestLocation = result.lastLocation
                             launch { send(result.lastLocation!!) }
                         }
@@ -88,7 +86,7 @@ class DefaultLocationClient(
         // Check whether the new location fix is newer or older
         val timeDelta = location.time - currentBestLocation!!.time
         val isSignificantlyNewer = timeDelta > TWO_MINUTES
-        val isSignificantlyOlder = timeDelta < TWO_MINUTES
+        val isSignificantlyOlder = timeDelta < -TWO_MINUTES
         val isNewer = timeDelta > 0
 
         // If it's been more than two minutes since the current location, use

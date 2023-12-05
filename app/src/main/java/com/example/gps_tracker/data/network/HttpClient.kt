@@ -16,7 +16,7 @@ class HttpClient {
         install(ContentNegotiation) {
             json()
         }
-
+        expectSuccess = true
         install(ResponseObserver){
             onResponse { response ->
                 Log.i("Response", "${response.status.value}")

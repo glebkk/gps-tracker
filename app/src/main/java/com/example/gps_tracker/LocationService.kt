@@ -18,6 +18,7 @@ import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
+import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -29,6 +30,8 @@ import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.lang.Exception
+import java.lang.RuntimeException
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -58,6 +61,23 @@ class LocationService: Service() {
     }
 
     private fun start() {
+        val sharedPref = getSharedPreferences(
+            getString(R.string.preference_file_key), Context.MODE_PRIVATE)
+        val uuid = sharedPref.getString(getString(R.string.user_uuid_key), "")
+
+
+        runBlocking {
+            try {
+                val res: HttpResponse =
+                    HttpClient().getHttpClient().post("$BASE_URL/users/enable-track") {
+                        header("Authorization", uuid)
+                    }
+            }
+            catch (e: Exception){
+                e.printStackTrace()
+            }
+        }
+
         val notification = NotificationCompat.Builder(this, "location")
             .setContentTitle("Tracking location...")
             .setContentText("Location: null")
@@ -75,7 +95,7 @@ class LocationService: Service() {
         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd:HH")
         val filepath = "GpsTracker"
         locationClient
-            .getLocationUpdates(5000L)
+            .getLocationUpdates(1000L)
             .catch { e -> e.printStackTrace() }
             .onEach { location ->
                 val lat = location.latitude.toString()
@@ -85,10 +105,7 @@ class LocationService: Service() {
                 )
                 notificationManager.notify(1, updatedNotification.build())
 
-                val sharedPref = getSharedPreferences(
-                    getString(R.string.preference_file_key), Context.MODE_PRIVATE)
 
-                val uuid = sharedPref.getString(getString(R.string.user_uuid_key), "")
                 runBlocking {
                     val res: HttpResponse =  HttpClient().getHttpClient().post("$BASE_URL/movements"){
                         header("Authorization", uuid)
@@ -114,6 +131,23 @@ class LocationService: Service() {
     }
 
     private fun stop() {
+        val sharedPref = getSharedPreferences(
+            getString(R.string.preference_file_key), Context.MODE_PRIVATE)
+        val uuid = sharedPref.getString(getString(R.string.user_uuid_key), "")
+
+
+        runBlocking {
+            try {
+                val res: HttpResponse =
+                    HttpClient().getHttpClient().post("$BASE_URL/users/disable-track") {
+                        header("Authorization", uuid)
+                    }
+            }
+            catch (e: Exception){
+                e.printStackTrace()
+            }
+        }
+
         stopForeground(true)
         stopSelf()
     }
