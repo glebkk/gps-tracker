@@ -1,11 +1,16 @@
 package com.example.gps_tracker
 
 import android.annotation.SuppressLint
+import android.content.ContentValues.TAG
 import android.content.Context
+import android.content.Intent
 import android.location.Location
 import android.location.LocationManager
+import android.os.Build
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -16,15 +21,23 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
 
+
 class DefaultLocationClient(
     private val context: Context,
-    private val client: FusedLocationProviderClient
+    private val client: FusedLocationProviderClient,
 ): LocationClient {
 
-    var currentBestLocation: Location? = null
+    private var kalmanFilter: Kalman
+    init {
+        kalmanFilter = Kalman(3f)
+    }
+
+    var currentSpeed = 0.0f // meters/second
+
+    var runStartTimeInMillis: Long = 0
 
     @SuppressLint("MissingPermission")
-    override fun getLocationUpdates(interval: Long): Flow<Location> {
+    override fun getLocationUpdates(interval: Long, minDistance: Float): Flow<Location> {
         return callbackFlow {
             if(!context.hasLocationPermission()) {
                 throw LocationClient.LocationException("Missing location permission")
@@ -40,19 +53,15 @@ class DefaultLocationClient(
 
             val request = LocationRequest.Builder(interval)
                 .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
-                .setMinUpdateDistanceMeters(5f)
+                .setMinUpdateDistanceMeters(minDistance)
                 .setWaitForAccurateLocation(true)
                 .build()
 
             val locationCallback = object : LocationCallback() {
                 override fun onLocationResult(result: LocationResult) {
                     super.onLocationResult(result)
-                    if(result.lastLocation != null) {
-                        if(isBetterLocation(result.lastLocation!!))  {
-                            currentBestLocation = result.lastLocation
-                            launch { send(result.lastLocation!!) }
-                        }
-                    }
+                    if(GetKalmanFilteredLocation(result.lastLocation!!) == null) return;
+                    launch { send(result.lastLocation!!) }
                 }
             }
 
@@ -68,54 +77,68 @@ class DefaultLocationClient(
         }
     }
 
+    private fun getLocationAge(newLocation: Location): Long {
+        val locationAge: Long = if (Build.VERSION.SDK_INT >= 17) {
+            (SystemClock.elapsedRealtimeNanos() / 1000000) - (newLocation.elapsedRealtimeNanos / 1000000)
+        } else {
+            System.currentTimeMillis() - newLocation.time
+        }
+        return locationAge
+    }
 
-    fun isBetterLocation(
-        location: Location
-    ): Boolean {
-        Log.d("isBL", location.toString() + " " + currentBestLocation.toString())
-        val TWO_MINUTES = 10000
-        if (currentBestLocation == null) {
-            // A new location is always better than no location
-            return true
+    private fun GetKalmanFilteredLocation(location: Location): Location? {
+        val age = getLocationAge(location)
+        if (age > 5 * 1000) { //more than 5 seconds
+            Log.d(TAG, "Location is old")
+            return null
+        }
+        if (location.accuracy <= 0) {
+            Log.d(TAG, "Latitidue and longitude values are invalid.")
+            return null
         }
 
-        if(currentBestLocation!!.distanceTo(location) < 5){
-            return false
+        //setAccuracy(newLocation.getAccuracy());
+        val horizontalAccuracy = location.accuracy
+        if (horizontalAccuracy > 20) { //10meter filter
+            Log.d(TAG, "Accuracy is too low. $horizontalAccuracy")
+            return null
         }
 
-        // Check whether the new location fix is newer or older
-        val timeDelta = location.time - currentBestLocation!!.time
-        val isSignificantlyNewer = timeDelta > TWO_MINUTES
-        val isSignificantlyOlder = timeDelta < -TWO_MINUTES
-        val isNewer = timeDelta > 0
 
-        // If it's been more than two minutes since the current location, use
-        // the new location
-        // because the user has likely moved
-        if (isSignificantlyNewer) {
-            return true
-            // If the new location is more than two minutes older, it must be
-            // worse
-        } else if (isSignificantlyOlder) {
-            return false
+        /* Kalman Filter */
+        val elapsedTimeInMillis = (location.elapsedRealtimeNanos / 1000000) - runStartTimeInMillis
+        val Qvalue: Float = if (currentSpeed == 0.0f) {
+            3.0f //3 meters per second
+        } else {
+            currentSpeed // meters per second
+        }
+        kalmanFilter.Process(
+            location.latitude,
+            location.longitude,
+            location.accuracy,
+            elapsedTimeInMillis,
+            Qvalue
+        )
+        val predictedLat = kalmanFilter!!._lat
+        val predictedLng = kalmanFilter!!._lng
+        val predictedLocation = Location("") //provider name is unecessary
+        predictedLocation.latitude = predictedLat //your coords of course
+        predictedLocation.longitude = predictedLng
+        val predictedDeltaInMeters = predictedLocation.distanceTo(location)
+        if (predictedDeltaInMeters > 60) {
+            Log.d(TAG, "Kalman Filter detects mal GPS, we should probably remove this from track")
+            kalmanFilter!!.consecutiveRejectCount += 1
+            if (kalmanFilter!!.consecutiveRejectCount > 3) {
+                kalmanFilter =
+                    Kalman(3f) //reset Kalman Filter if it rejects more than 3 times in raw.
+            }
+            return null
+        } else {
+            kalmanFilter!!.consecutiveRejectCount = 0
         }
 
-        // Check whether the new location fix is more or less accurate
-        val accuracyDelta = (location.accuracy - currentBestLocation!!
-            .accuracy).toInt()
-        val isLessAccurate = accuracyDelta > 0
-        val isMoreAccurate = accuracyDelta < 0
-        val isSignificantlyLessAccurate = accuracyDelta > 200
-
-        // Determine location quality using a combination of timeliness and
-        // accuracy
-        if (isMoreAccurate) {
-            return true
-        } else if (isNewer && !isLessAccurate) {
-            return true
-        } else if (isNewer && !isSignificantlyLessAccurate) {
-            return true
-        }
-        return false
+        Log.d(TAG, "Location quality is good enough.")
+        currentSpeed = location.speed
+        return location
     }
 }

@@ -52,7 +52,7 @@ class LocationService: Service() {
         )
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    override fun onStartCommand(intent: Intent?,      flags: Int, startId: Int): Int {
         when(intent?.action) {
             ACTION_START -> start()
             ACTION_STOP -> stop()
@@ -95,7 +95,7 @@ class LocationService: Service() {
         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd:HH")
         val filepath = "GpsTracker"
         locationClient
-            .getLocationUpdates(1000L)
+            .getLocationUpdates(1000L, 3f)
             .catch { e -> e.printStackTrace() }
             .onEach { location ->
                 val lat = location.latitude.toString()
@@ -107,9 +107,14 @@ class LocationService: Service() {
 
 
                 runBlocking {
-                    val res: HttpResponse =  HttpClient().getHttpClient().post("$BASE_URL/movements"){
-                        header("Authorization", uuid)
-                        setBody(CreateMovement(latitude = lat, longitude = long))
+                    try {
+                        val res: HttpResponse =
+                            HttpClient().getHttpClient().post("$BASE_URL/movements") {
+                                header("Authorization", uuid)
+                                setBody(CreateMovement(latitude = lat, longitude = long))
+                            }
+                    } catch (e: Exception){
+                        e.printStackTrace()
                     }
                 }
                 try {
